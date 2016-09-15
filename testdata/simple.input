@@ -1,0 +1,9 @@
+package foop
+
+type foo struct {
+	bar struct {
+		baz int
+	}
+}
+
+var _ = foo{bar: {baz:6}}
