@@ -1,4 +1,4 @@
-package foop
+package p
 
 type foo struct {
 	bar struct {
