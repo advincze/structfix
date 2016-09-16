@@ -38,7 +38,9 @@ type nopWriteCloser struct {
 	io.Writer
 }
 
-func (n *nopWriteCloser) Close() error { return nil }
+func (n *nopWriteCloser) Close() error {
+	return nil
+}
 
 func printResult(write bool, w io.Writer) func(string) io.WriteCloser {
 	return func(filename string) io.WriteCloser {
