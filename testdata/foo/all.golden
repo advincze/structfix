@@ -1,0 +1,26 @@
+package p
+
+type foo struct {
+	bar struct {
+		baz struct {
+			qux struct {
+				quux int
+			}
+		}
+	}
+}
+package p
+
+var _ = foo{bar: struct {
+	baz struct {
+		qux struct {
+			quux int
+		}
+	}
+}{baz: struct {
+	qux struct {
+		quux int
+	}
+}{qux: struct {
+	quux int
+}{quux: 42}}}}

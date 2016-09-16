@@ -31,7 +31,6 @@ func main() {
 			processFile(path, printResult(*write, os.Stdout))
 		}
 	}
-
 }
 
 func printResult(write bool, out io.Writer) func(string, *token.FileSet, *ast.File) {
@@ -50,22 +49,24 @@ func printResult(write bool, out io.Writer) func(string, *token.FileSet, *ast.Fi
 
 func processDir(path string, fn func(string, *token.FileSet, *ast.File)) {
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, path, nil, parser.AllErrors)
+	pkgs, err := parser.ParseDir(fset, path, nil, 0)
 	if err != nil {
 		panic(err)
 	}
 
 	for _, pkg := range pkgs {
+		ast.Walk(&V{fset: fset}, pkg)
 		for fname, f := range pkg.Files {
-			ast.Walk(&V{fset: fset}, f)
 			fn(fname, fset, f)
 		}
+		// ast.Print(fset, pkg)
 	}
+
 }
 
 func processFile(filename string, fn func(string, *token.FileSet, *ast.File)) {
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, filename, nil, parser.AllErrors)
+	f, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
 	if err != nil {
 		panic(err)
 	}
@@ -120,6 +121,7 @@ func checkAndCorrect(kv *ast.KeyValueExpr, st *ast.StructType, fset *token.FileS
 	if !ok {
 		return
 	}
+
 	fst, ok := fld.Type.(*ast.StructType)
 	if !ok {
 		return
