@@ -33,21 +33,26 @@ func main() {
 	}
 }
 
-func printResult(write bool, out io.Writer) func(string, *token.FileSet, *ast.File) {
-	return func(filename string, fset *token.FileSet, f *ast.File) {
+type nopWriteCloser struct {
+	io.Writer
+}
+
+func (n *nopWriteCloser) Close() error { return nil }
+
+func printResult(write bool, w io.Writer) func(string) io.WriteCloser {
+	return func(filename string) io.WriteCloser {
 		if write {
 			fi, err := os.OpenFile(filename, os.O_TRUNC|os.O_RDWR, 0644)
 			if err != nil {
 				panic(err)
 			}
-			defer fi.Close()
-			out = fi
+			return fi
 		}
-		printer.Fprint(out, fset, f)
+		return &nopWriteCloser{w}
 	}
 }
 
-func processDir(path string, fn func(string, *token.FileSet, *ast.File)) {
+func processDir(path string, outFn func(string) io.WriteCloser) {
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, path, nil, 0)
 	if err != nil {
@@ -57,14 +62,18 @@ func processDir(path string, fn func(string, *token.FileSet, *ast.File)) {
 	for _, pkg := range pkgs {
 		ast.Walk(&V{fset: fset}, pkg)
 		for fname, f := range pkg.Files {
-			fn(fname, fset, f)
+			func() {
+				wc := outFn(fname)
+				defer wc.Close()
+				printer.Fprint(wc, fset, f)
+			}()
+
 		}
-		// ast.Print(fset, pkg)
 	}
 
 }
 
-func processFile(filename string, fn func(string, *token.FileSet, *ast.File)) {
+func processFile(filename string, outFn func(string) io.WriteCloser) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
 	if err != nil {
@@ -72,7 +81,11 @@ func processFile(filename string, fn func(string, *token.FileSet, *ast.File)) {
 	}
 
 	ast.Walk(&V{fset: fset}, f)
-	fn(filename, fset, f)
+
+	wc := outFn(filename)
+	defer wc.Close()
+	printer.Fprint(wc, fset, f)
+
 }
 
 type V struct {
