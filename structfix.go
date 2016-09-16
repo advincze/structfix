@@ -9,6 +9,7 @@ import (
 	"go/token"
 	"io"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -54,12 +55,16 @@ func printResult(write bool, w io.Writer) func(string) io.WriteCloser {
 
 func processDir(path string, outFn func(string) io.WriteCloser) {
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, path, nil, 0)
+	pkgs, err := parser.ParseDir(fset, path, func(fi os.FileInfo) bool {
+		return strings.HasSuffix(fi.Name(), ".go")
+	}, parser.ParseComments)
 	if err != nil {
 		panic(err)
 	}
 
 	for _, pkg := range pkgs {
+		pkg, _ := ast.NewPackage(fset, pkg.Files, nil, nil)
+
 		ast.Walk(&V{fset: fset}, pkg)
 		for fname, f := range pkg.Files {
 			func() {

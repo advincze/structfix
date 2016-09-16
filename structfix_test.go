@@ -49,12 +49,9 @@ func TestFixDir(t *testing.T) {
 			bufs[filename] = &buf
 			return &nopWriteCloser{&buf}
 		})
-		fmt.Println(len(bufs))
 
 		for filename, buf := range bufs {
-
 			golden := fmt.Sprintf("%s.golden", filename)
-			fmt.Println(filename, golden)
 			if *update {
 				ioutil.WriteFile(golden, buf.Bytes(), 0644)
 			}
