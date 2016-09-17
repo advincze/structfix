@@ -8,8 +8,8 @@ import (
 	"go/printer"
 	"go/token"
 	"io"
+	"log"
 	"os"
-	"strings"
 )
 
 func main() {
@@ -25,7 +25,7 @@ func main() {
 	for _, path := range flag.Args() {
 		switch dir, err := os.Stat(path); {
 		case err != nil:
-			panic(err)
+			log.Fatalf("Error checking path %q: %v", path, err)
 		case dir.IsDir():
 			processDir(path, printResult(*write, os.Stdout))
 		default:
@@ -45,34 +45,32 @@ func (n *nopWriteCloser) Close() error {
 func printResult(write bool, w io.Writer) func(string) io.WriteCloser {
 	return func(filename string) io.WriteCloser {
 		if write {
-			fi, err := os.OpenFile(filename, os.O_TRUNC|os.O_RDWR, 0644)
+			f, err := os.OpenFile(filename, os.O_TRUNC|os.O_WRONLY, 0644)
 			if err != nil {
-				panic(err)
+				log.Fatalf("Error opening file %q: %v", filename, err)
 			}
-			return fi
+			return f
 		}
 		return &nopWriteCloser{w}
 	}
 }
 
-func processDir(path string, outFn func(string) io.WriteCloser) {
+func processDir(dir string, outFn func(string) io.WriteCloser) {
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, path, func(fi os.FileInfo) bool {
-		return strings.HasSuffix(fi.Name(), ".go")
-	}, parser.ParseComments)
+	pkgs, err := parser.ParseDir(fset, dir, nil, parser.ParseComments)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error parsing dir %q: %v", dir, err)
 	}
 
 	for _, pkg := range pkgs {
 		pkg, _ := ast.NewPackage(fset, pkg.Files, nil, nil)
 
 		ast.Walk(&V{fset: fset}, pkg)
-		for fname, f := range pkg.Files {
+		for filename, file := range pkg.Files {
 			func() {
-				wc := outFn(fname)
+				wc := outFn(filename)
 				defer wc.Close()
-				printer.Fprint(wc, fset, f)
+				printer.Fprint(wc, fset, file)
 			}()
 
 		}
@@ -82,17 +80,16 @@ func processDir(path string, outFn func(string) io.WriteCloser) {
 
 func processFile(filename string, outFn func(string) io.WriteCloser) {
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
+	file, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error parsing file %q: %v", filename, err)
 	}
 
-	ast.Walk(&V{fset: fset}, f)
+	ast.Walk(&V{fset: fset}, file)
 
 	wc := outFn(filename)
 	defer wc.Close()
-	printer.Fprint(wc, fset, f)
-
+	printer.Fprint(wc, fset, file)
 }
 
 type V struct {
@@ -137,17 +134,12 @@ func checkAndCorrect(kv *ast.KeyValueExpr, st *ast.StructType, fset *token.FileS
 		return
 	}
 
-	fld, ok := getField(st, ki.Name)
+	fst, ok := getFieldStructType(st, ki.Name)
 	if !ok {
 		return
 	}
 
-	fst, ok := fld.Type.(*ast.StructType)
-	if !ok {
-		return
-	}
-
-	vcl.Type = fld.Type
+	vcl.Type = fst
 
 	for _, el := range vcl.Elts {
 		if subkv, ok := el.(*ast.KeyValueExpr); ok {
@@ -156,7 +148,7 @@ func checkAndCorrect(kv *ast.KeyValueExpr, st *ast.StructType, fset *token.FileS
 	}
 }
 
-func getField(st *ast.StructType, name string) (*ast.Field, bool) {
+func getFieldStructType(st *ast.StructType, name string) (*ast.StructType, bool) {
 	if st.Fields == nil {
 		return nil, false
 	}
@@ -164,7 +156,10 @@ func getField(st *ast.StructType, name string) (*ast.Field, bool) {
 	for _, fld := range st.Fields.List {
 		for _, fldName := range fld.Names {
 			if fldName.Name == name {
-				return fld, true
+				if fst, ok := fld.Type.(*ast.StructType); ok {
+					return fst, true
+				}
+				return nil, false
 			}
 		}
 	}
